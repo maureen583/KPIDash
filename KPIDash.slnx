@@ -3,4 +3,5 @@
   <Project Path="KPIDash.Data/KPIDash.Data.csproj" />
   <Project Path="KPIDash.Services/KPIDash.Services.csproj" />
   <Project Path="KPIDash.UI/KPIDash.UI.csproj" />
+  <Project Path="KPIDash.Seeder/KPIDash.Seeder.csproj" />
 </Solution>
