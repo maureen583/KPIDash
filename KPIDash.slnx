@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="KPIDash.API/KPIDash.API.csproj" />
+  <Project Path="KPIDash.Data/KPIDash.Data.csproj" />
+  <Project Path="KPIDash.Services/KPIDash.Services.csproj" />
+  <Project Path="KPIDash.UI/KPIDash.UI.csproj" />
+</Solution>

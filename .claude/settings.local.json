@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(slnx|sln|csproj|json|xml|yaml|yml\\)$\")",
+      "Bash(grep -E \"\\\\.\\(razor|html|cs\\)$\")",
+      "Bash(grep -r \"KPIDash\" /workspace/KPIDash --include=\"*.cs\" --include=\"*.razor\" --include=\"*.json\" --include=\"*.html\" ! -path \"*/bin/*\" ! -path \"*/obj/*\")",
+      "Bash(find:*)",
+      "Bash(dotnet build:*)"
+    ]
+  }
+}

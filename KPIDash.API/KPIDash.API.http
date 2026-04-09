@@ -1,0 +1,6 @@
+@KPIDash.API_HostAddress = http://localhost:5250
+
+GET {{KPIDash.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
