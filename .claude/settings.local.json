@@ -5,7 +5,8 @@
       "Bash(grep -E \"\\\\.\\(razor|html|cs\\)$\")",
       "Bash(grep -r \"KPIDash\" /workspace/KPIDash --include=\"*.cs\" --include=\"*.razor\" --include=\"*.json\" --include=\"*.html\" ! -path \"*/bin/*\" ! -path \"*/obj/*\")",
       "Bash(find:*)",
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(sqlite3 *)"
     ]
   }
 }

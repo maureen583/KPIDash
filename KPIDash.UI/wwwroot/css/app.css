@@ -105,6 +105,50 @@ code {
     color: #c02d76;
 }
 
+/* Equipment Status Timeline */
+.timeline-bar {
+    display: flex;
+    height: 26px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #e9ecef;
+    min-width: 0;
+}
+
+.timeline-segment {
+    height: 100%;
+    flex-shrink: 0;
+}
+
+.timeline-equipment-name {
+    width: 150px;
+    min-width: 150px;
+    font-size: 0.875rem;
+    padding-right: 8px;
+}
+
+.timeline-time-axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: #9ca3af;
+    padding-left: 158px;
+    padding-right: 102px;
+}
+
+.timeline-status-badge {
+    width: 90px;
+    min-width: 90px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.timeline-line-label {
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+}
+
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
     color: var(--bs-secondary-color);
     text-align: end;

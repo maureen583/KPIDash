@@ -77,6 +77,84 @@ public class TimelineGenerator(Random rng)
         return result.Where(d => d.Item2 <= to).ToList();
     }
 
+    public List<StateWindow> ApplyCascade(List<StateWindow> downstream, List<StateWindow> upstream)
+    {
+        var points = new SortedSet<DateTime>();
+        foreach (var w in downstream.Concat(upstream))
+        {
+            points.Add(w.Start);
+            points.Add(w.End);
+        }
+
+        var segments = new List<StateWindow>();
+        var pointList = points.ToList();
+
+        for (int i = 0; i < pointList.Count - 1; i++)
+        {
+            var segStart = pointList[i];
+            var segEnd   = pointList[i + 1];
+
+            var downW = FindWindowAt(downstream, segStart);
+            if (downW == null) continue;
+
+            var upW = FindWindowAt(upstream, segStart);
+            var upRunning = upW?.Status == "Running";
+
+            var status = downW.Status;
+            var reason = downW.Reason;
+
+            if (!upRunning && status == "Running")
+            {
+                status = "Idle";
+                reason = "Idle";
+            }
+
+            segments.Add(new StateWindow(segStart, segEnd, status, reason));
+        }
+
+        return CollapseShortSegments(MergeWindows(segments), minMinutes: 2.0);
+    }
+
+    private static List<StateWindow> CollapseShortSegments(List<StateWindow> windows, double minMinutes)
+    {
+        var list = windows.ToList();
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if ((list[i].End - list[i].Start).TotalMinutes >= minMinutes) continue;
+                if (i < list.Count - 1)
+                    list[i + 1] = list[i + 1] with { Start = list[i].Start };
+                else if (i > 0)
+                    list[i - 1] = list[i - 1] with { End = list[i].End };
+                list.RemoveAt(i);
+                changed = true;
+                break;
+            }
+        }
+        return MergeWindows(list);
+    }
+
+    private static StateWindow? FindWindowAt(List<StateWindow> windows, DateTime time) =>
+        windows.FirstOrDefault(w => w.Start <= time && w.End > time);
+
+    private static List<StateWindow> MergeWindows(List<StateWindow> windows)
+    {
+        if (windows.Count == 0) return windows;
+        var merged = new List<StateWindow> { windows[0] };
+        foreach (var curr in windows.Skip(1))
+        {
+            var last = merged[^1];
+            if (last.Status == curr.Status && last.Reason == curr.Reason && last.End == curr.Start)
+                merged[^1] = last with { End = curr.End };
+            else
+                merged.Add(curr);
+        }
+        return merged;
+    }
+
     private void FillRunningIdle(List<StateWindow> windows, DateTime start, DateTime end)
     {
         var cursor = start;

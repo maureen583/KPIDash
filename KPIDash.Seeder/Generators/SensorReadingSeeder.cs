@@ -29,13 +29,13 @@ public class SensorReadingSeeder(DbConnectionFactory factory, Random rng)
         int total = 0;
         var buffer = new List<object>(BatchSize);
 
+        using var tx = conn.BeginTransaction();
+
         void Flush()
         {
-            using var tx = conn.BeginTransaction();
             conn.Execute(
                 "INSERT INTO SensorReadings (SensorId, RecordedAt, Value) VALUES (@SensorId, @RecordedAt, @Value)",
                 buffer, tx);
-            tx.Commit();
             total += buffer.Count;
             buffer.Clear();
         }
@@ -71,6 +71,7 @@ public class SensorReadingSeeder(DbConnectionFactory factory, Random rng)
         }
 
         if (buffer.Count > 0) Flush();
+        tx.Commit();
         Console.WriteLine($"  SensorReadings: {total} rows");
     }
 

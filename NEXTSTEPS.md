@@ -1,1 +1,1 @@
-2026-04-09: Generating Seeder Data, generated SensorReadings and hung. Further investigation is required.
+20260417: Update Dashboard to display by shift instead of by last 4 hours. Verify that the transitions with the data make sense, deep dive on timing, is the cascading working how I would expect it to? Downstream equipment should have some idle time before it starts up again. Do we need to figure this out or is it enough to just have the data displaying correctly for the demo?

@@ -1,0 +1,112 @@
+@using KPIDash.UI.Models
+@inject HttpClient Http
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Equipment Status Timeline</h4>
+    <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary" @onclick='() => ShiftWindow(-4)'>← 4h</button>
+        <input type="date" class="form-control form-control-sm" style="width: 160px;"
+               value="@windowEnd.ToString("yyyy-MM-dd")"
+               @onchange="OnDateChanged" />
+        <button class="btn btn-sm btn-outline-secondary" @onclick='() => ShiftWindow(4)' disabled="@IsAtNow">4h →</button>
+        <button class="btn btn-sm btn-secondary" @onclick="JumpToNow">Now</button>
+    </div>
+</div>
+
+<p class="text-muted small mb-4">
+    @windowStart.ToString("MMM d, HH:mm") – @windowEnd.ToString("HH:mm") UTC
+</p>
+
+@if (isLoading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-secondary" role="status">
+            <span class="visually-hidden">Loading…</span>
+        </div>
+    </div>
+}
+else
+{
+    <EquipmentLineTimeline LineName="Line 1"
+                           LineEquipment="line1Equipment"
+                           StatusData="statusData"
+                           WindowStart="windowStart"
+                           WindowEnd="windowEnd" />
+
+    <EquipmentLineTimeline LineName="Line 2"
+                           LineEquipment="line2Equipment"
+                           StatusData="statusData"
+                           WindowStart="windowStart"
+                           WindowEnd="windowEnd" />
+
+    <div class="d-flex gap-4 mt-2">
+        <span><span style="color: #28a745;">●</span> Running</span>
+        <span><span style="color: #ffc107;">●</span> Idle</span>
+        <span><span style="color: #dc3545;">●</span> Down</span>
+    </div>
+}
+
+@code {
+    private DateTime windowEnd = DateTime.UtcNow;
+    private DateTime windowStart => windowEnd.AddHours(-4);
+    private bool IsAtNow => windowEnd >= DateTime.UtcNow.AddMinutes(-1);
+
+    private List<Equipment> allEquipment = new();
+    private List<Equipment> line1Equipment = new();
+    private List<Equipment> line2Equipment = new();
+    private Dictionary<int, List<EquipmentStatus>> statusData = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        allEquipment = await Http.GetFromJsonAsync<List<Equipment>>("/api/equipment/") ?? new();
+        line1Equipment = allEquipment.Where(e => e.Name.StartsWith("Line 1")).OrderBy(e => e.DisplayOrder).ToList();
+        line2Equipment = allEquipment.Where(e => e.Name.StartsWith("Line 2")).OrderBy(e => e.DisplayOrder).ToList();
+        await LoadStatusData();
+    }
+
+    private async Task LoadStatusData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        // Query with an 8-hour buffer before the window so we always capture the baseline status
+        // even when equipment hasn't changed state within the visible 4-hour window.
+        var queryFrom = windowStart.AddHours(-8);
+
+        var tasks = allEquipment.Select(async e =>
+        {
+            var url = $"/api/equipment/{e.EquipmentId}/status/history?from={queryFrom:o}&to={windowEnd:o}";
+            var records = await Http.GetFromJsonAsync<List<EquipmentStatus>>(url) ?? new();
+            return (e.EquipmentId, records);
+        });
+
+        var results = await Task.WhenAll(tasks);
+        statusData = results.ToDictionary(r => r.EquipmentId, r => r.records);
+
+        isLoading = false;
+    }
+
+    private async Task ShiftWindow(int hours)
+    {
+        var candidate = windowEnd.AddHours(hours);
+        windowEnd = candidate > DateTime.UtcNow ? DateTime.UtcNow : candidate;
+        await LoadStatusData();
+    }
+
+    private async Task JumpToNow()
+    {
+        windowEnd = DateTime.UtcNow;
+        await LoadStatusData();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var date))
+        {
+            var endOfDay = date.Date.AddDays(1).AddTicks(-1);
+            windowEnd = endOfDay > DateTime.UtcNow ? DateTime.UtcNow : endOfDay;
+            await LoadStatusData();
+        }
+    }
+}

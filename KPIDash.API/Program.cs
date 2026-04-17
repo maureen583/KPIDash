@@ -23,6 +23,9 @@ var app = builder.Build();
 
 app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
 
+app.UseBlazorFrameworkFiles();
+app.UseStaticFiles();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -35,5 +38,7 @@ app.MapDowntimeEndpoints();
 app.MapBatchEndpoints();
 app.MapEmployeeEndpoints();
 app.MapTimeLogEndpoints();
+
+app.MapFallbackToFile("index.html");
 
 app.Run();

@@ -14,6 +14,6 @@ Console.WriteLine("=== KPIDash Seeder ===");
 Console.WriteLine($"Database: {connectionString}");
 Console.WriteLine();
 
-var factory = new DbConnectionFactory(connectionString);
+var factory = new SeederConnectionFactory(connectionString);
 var orchestrator = new SeedOrchestrator(factory);
 orchestrator.Seed();

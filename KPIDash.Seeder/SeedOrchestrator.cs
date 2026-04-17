@@ -10,9 +10,9 @@ public class SeedOrchestrator(DbConnectionFactory factory)
     {
         var rng = new Random(42); // fixed seed for reproducibility
         var to = DateTime.UtcNow;
-        var from = to.AddDays(-30);
+        var from = to.AddDays(-7);
 
-        Console.WriteLine($"Seeding 30 days: {from:yyyy-MM-dd} → {to:yyyy-MM-dd}");
+        Console.WriteLine($"Seeding 7 days: {from:yyyy-MM-dd} → {to:yyyy-MM-dd}");
         Console.WriteLine();
 
         ClearData();
@@ -34,12 +34,26 @@ public class SeedOrchestrator(DbConnectionFactory factory)
             "SELECT EquipmentId, Type FROM Equipment ORDER BY EquipmentId")
             .ToDictionary(e => e.EquipmentId, e => e.Type);
 
-        // 5. Generate timelines for all 8 equipment
+        // 5. Generate timelines per line, cascading downstream states from upstream
         Console.WriteLine("  Generating state timelines...");
         var generator = new TimelineGenerator(rng);
-        var timelines = equipmentTypes.ToDictionary(
-            kvp => kvp.Key,
-            kvp => generator.Generate(kvp.Value, from, to));
+        var timelines = new Dictionary<int, List<StateWindow>>();
+
+        // Line 1: 1→3→5→7  |  Line 2: 2→4→6→8
+        int[][] linePipelines = [[1, 3, 5, 7], [2, 4, 6, 8]];
+        foreach (var pipeline in linePipelines)
+        {
+            List<StateWindow>? upstreamTimeline = null;
+            foreach (var equipId in pipeline)
+            {
+                var type = equipmentTypes[equipId];
+                var timeline = generator.Generate(type, from, to);
+                if (upstreamTimeline != null)
+                    timeline = generator.ApplyCascade(timeline, upstreamTimeline);
+                timelines[equipId] = timeline;
+                upstreamTimeline = timeline;
+            }
+        }
 
         // 6. TimeLog
         var shiftAssignments = new TimeLogSeeder(factory, rng).Seed(employees, from, to);

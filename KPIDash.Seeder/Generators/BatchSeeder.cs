@@ -13,12 +13,15 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
         DateTime to)
     {
         using var conn = factory.Create();
+        conn.Open();
         int total = 0;
 
         // Process both Banbury mixers (InternalMixer type, DisplayOrder 3 and 4)
         var mixerIds = conn.Query<int>(
             "SELECT EquipmentId FROM Equipment WHERE Type = 'InternalMixer' ORDER BY DisplayOrder")
             .ToList();
+
+        using var tx = conn.BeginTransaction();
 
         // Shared daily counter across both lines so batch numbers don't collide
         var dailyCounts = new Dictionary<string, int>();
@@ -64,7 +67,7 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
                             TargetDumpTemp = TargetDumpTemp,
                             Status = status,
                             OperatorId = operatorId
-                        });
+                        }, tx);
 
                     total++;
                     cursor = batchEnd;
@@ -72,6 +75,7 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
             }
         }
 
+        tx.Commit();
         Console.WriteLine($"  Batches: {total} rows");
     }
 

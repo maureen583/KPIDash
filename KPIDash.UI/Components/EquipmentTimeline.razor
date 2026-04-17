@@ -1,0 +1,93 @@
+@using KPIDash.UI.Models
+
+<div class="mb-5">
+    <h5 class="fw-semibold mb-2 text-secondary text-uppercase timeline-line-label">@LineName</h5>
+
+    <div class="timeline-time-axis mb-1">
+        @for (int i = 0; i <= 4; i++)
+        {
+            <span>@WindowStart.AddHours(i).ToString("HH:mm")</span>
+        }
+    </div>
+
+    @foreach (var equipment in LineEquipment.OrderBy(e => e.DisplayOrder))
+    {
+        var segments = BuildSegments(
+            StatusData.TryGetValue(equipment.EquipmentId, out var records) ? records : new(),
+            WindowStart, WindowEnd);
+        var currentStatus = segments.Count > 0 ? segments[^1].Status : "Unknown";
+        var shortName = equipment.Name.Replace("Line 1 ", "").Replace("Line 2 ", "");
+
+        <div class="d-flex align-items-center mb-2">
+            <span class="timeline-equipment-name text-truncate" title="@equipment.Name">@shortName</span>
+            <div class="timeline-bar flex-grow-1">
+                @foreach (var seg in segments)
+                {
+                    var widthPct = WidthPct(seg.Start, seg.End)
+                        .ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                    <div class="timeline-segment"
+                         style="width: @widthPct%; background-color: @GetColor(seg.Status);"
+                         title="@seg.Status — @seg.Start.ToString("HH:mm") to @seg.End.ToString("HH:mm")">
+                    </div>
+                }
+            </div>
+            <span class="timeline-status-badge ms-2" style="color: @GetColor(currentStatus);">
+                ● @currentStatus
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string LineName { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public List<Equipment> LineEquipment { get; set; } = new();
+    [Parameter, EditorRequired] public Dictionary<int, List<EquipmentStatus>> StatusData { get; set; } = new();
+    [Parameter, EditorRequired] public DateTime WindowStart { get; set; }
+    [Parameter, EditorRequired] public DateTime WindowEnd { get; set; }
+
+    private static string GetColor(string status) => status switch
+    {
+        "Running" => "#28a745",
+        "Idle"    => "#ffc107",
+        "Down"    => "#dc3545",
+        _         => "#adb5bd"
+    };
+
+    private double WidthPct(DateTime start, DateTime end) =>
+        (end - start).TotalSeconds / (WindowEnd - WindowStart).TotalSeconds * 100.0;
+
+    private List<(DateTime Start, DateTime End, string Status)> BuildSegments(
+        List<EquipmentStatus> records, DateTime windowStart, DateTime windowEnd)
+    {
+        var sorted = records.OrderBy(r => r.RecordedAt).ToList();
+        var segments = new List<(DateTime Start, DateTime End, string Status)>();
+
+        if (sorted.Count == 0)
+        {
+            segments.Add((windowStart, windowEnd, "Unknown"));
+            return segments;
+        }
+
+        // Last record at or before windowStart gives the baseline status for the window start.
+        var baseline = sorted.LastOrDefault(r => r.RecordedAt <= windowStart);
+        var inWindow = sorted.Where(r => r.RecordedAt > windowStart).ToList();
+
+        var cursor = windowStart;
+        var currentStatus = baseline?.Status ?? "Unknown";
+
+        foreach (var record in inWindow)
+        {
+            var segEnd = record.RecordedAt < windowEnd ? record.RecordedAt : windowEnd;
+            if (segEnd > cursor)
+                segments.Add((cursor, segEnd, currentStatus));
+            cursor = segEnd;
+            currentStatus = record.Status;
+            if (cursor >= windowEnd) break;
+        }
+
+        if (cursor < windowEnd)
+            segments.Add((cursor, windowEnd, currentStatus));
+
+        return segments;
+    }
+}

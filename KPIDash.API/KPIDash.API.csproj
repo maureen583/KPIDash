@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.6" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
   </ItemGroup>
@@ -14,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\KPIDash.Data\KPIDash.Data.csproj" />
     <ProjectReference Include="..\KPIDash.Services\KPIDash.Services.csproj" />
+    <ProjectReference Include="..\KPIDash.UI\KPIDash.UI.csproj" />
   </ItemGroup>
 
 </Project>

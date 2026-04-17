@@ -5,5 +5,5 @@ namespace KPIDash.Data;
 
 public class DbConnectionFactory(string connectionString)
 {
-    public IDbConnection Create() => new SqliteConnection(connectionString);
+    public virtual IDbConnection Create() => new SqliteConnection(connectionString);
 }
