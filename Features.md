@@ -6,12 +6,12 @@
 
 A color-coded horizontal bar chart (one chart per production line) showing the live status of each of the 4 equipment pieces over the current shift. Three shifts per day: Day (06:00-14:00), Afternoon (14:00-22:00), Night (22:00-06:00)
 
-| Color  | Status  | Meaning                         |
-| ------ | ------- | ------------------------------- |
-| Green  | Running | Equipment producing normally    |
-| Yellow | Idle    | Healthy but not producing       |
-| Red    | Down    | Fault or parameter out of range |
-| Black  | No Data | Time has not occurred yet       |
+| Color  | Status  | Meaning                                        |
+| ------ | ------- | ---------------------------------------------- |
+| Green  | Running | Equipment producing normally                   |
+| Yellow | Idle    | Healthy but not producing                      |
+| Red    | Down    | Fault or parameter out of range                |
+| Gray   | Unknown | No status data recorded for this shift period  |
 
 ### KPI Summary
 

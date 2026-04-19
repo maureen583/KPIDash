@@ -6,10 +6,11 @@
 2. Employees
 3. Sensors
 4. TimeLog
-5. Batches
-6. SensorReadings
-7. EquipmentStatus
-8. DowntimeEvents
+5. ProductionSchedule
+6. Batches
+7. SensorReadings
+8. EquipmentStatus
+9. DowntimeEvents
 
 ---
 
@@ -22,7 +23,8 @@ Equipment (8 rows — Line 1 and Line 2 for each of 4 types)
 └──< DowntimeEvents (one row per down period)
 Employees (~15 rows)
 └──< TimeLog (clock in/out, 7 days of shifts)
-└──< Batches (each batch tied to one operator)
+ProductionSchedule (2-3 compound runs per shift per line, 7 days)
+└──< Batches (each batch tied to one operator, one line, one compound)
 
 ---
 
@@ -105,6 +107,69 @@ Generate 15 fake employees using Bogus with these roles:
 
 ---
 
+## ProductionSchedule Rules
+
+Each shift on each line is divided into 2–3 consecutive compound runs. Every run gets its own row — the schedule is fully chronological with no gaps on Day and Afternoon shifts, and a 2-hour unscheduled window at the end of Night shifts.
+
+### Schema
+
+| Column           | Type    | Notes                                              |
+| ---------------- | ------- | -------------------------------------------------- |
+| ScheduleId       | INTEGER | PK AUTOINCREMENT                                   |
+| ShiftDate        | TEXT    | YYYY-MM-DD — date the shift **started**            |
+| Shift            | TEXT    | Day \| Afternoon \| Night                          |
+| Line             | TEXT    | 'Line 1' \| 'Line 2'                               |
+| CompoundCode     | TEXT    | e.g. 'NR-100'                                      |
+| CompoundName     | TEXT    | e.g. 'Natural Rubber Base'                         |
+| ScheduledStart   | TEXT    | ISO datetime — start of this compound run          |
+| ScheduledEnd     | TEXT    | ISO datetime — end of this compound run            |
+| TargetBatches    | INTEGER | duration\_minutes / 10 (avg cycle time), rounded   |
+| PlannedOperators | INTEGER | Planned headcount for the full shift               |
+
+### Compound library (rotate through these)
+
+| CompoundCode | CompoundName              |
+| ------------ | ------------------------- |
+| NR-100       | Natural Rubber Base       |
+| SBR-200      | Styrene Butadiene General |
+| EPDM-300     | EPDM Weather Seal         |
+| NBR-400      | Nitrile Oil Resistant     |
+| CR-500       | Chloroprene Adhesive      |
+| BR-600       | Butadiene High Resilience |
+
+### Shift capacity rules
+
+| Shift     | Shift window    | Scheduled production | Unscheduled |
+| --------- | --------------- | -------------------- | ----------- |
+| Day       | 06:00 – 14:00   | 06:00 – 14:00 (8 h)  | none        |
+| Afternoon | 14:00 – 22:00   | 14:00 – 22:00 (8 h)  | none        |
+| Night     | 22:00 – 06:00   | 22:00 – 04:00 (6 h)  | 04:00–06:00 |
+
+- Day and Afternoon shifts are scheduled to 100% capacity — compound runs fill the full 8 hours with no gaps
+- Night shift schedules 6 of 8 hours — the last 2 hours (04:00–06:00) are unscheduled (no rows)
+- Generate 2 or 3 compound runs per shift per line (randomise; do not always split evenly)
+- Run durations must sum exactly to the scheduled window
+- Example 3-run Day split: 2.5 h / 3 h / 2.5 h → TargetBatches: 15 / 18 / 15
+- Do not repeat the same compound consecutively on the same line within a shift
+
+### TargetBatches calculation
+
+`TargetBatches = ROUND(duration_minutes / 10)`
+
+Average cycle time is 10 minutes (midpoint of the 8–12 min Banbury cycle).
+
+### PlannedOperators per shift
+
+| Shift     | PlannedOperators |
+| --------- | ---------------- |
+| Day       | 5                |
+| Afternoon | 4                |
+| Night     | 3                |
+
+Same value for every row belonging to the same shift.
+
+---
+
 ## Batch Rules
 
 - One batch takes 8-12 minutes in the Banbury
@@ -115,6 +180,9 @@ Generate 15 fake employees using Bogus with these roles:
 - ~2% of batches should have Status = InProgress (most recent batch of current shift)
 - All others Status = Complete
 - Each batch is assigned to one Operator from the active shift
+- Each batch must have a `Line` value ('Line 1' or 'Line 2') — split roughly 50/50 per shift
+- Each batch must have a `CompoundCode` matching the ProductionSchedule row whose
+  ScheduledStart–ScheduledEnd window contains the batch's StartedAt timestamp
 
 ---
 
@@ -205,5 +273,7 @@ A typical 24-hour period should look roughly like:
 - SensorReadings and EquipmentStatus must be internally consistent
   (a Down status must have at least one out-of-range sensor reading)
 - Batches only occur when the Banbury is in Running state
+- Batch StartedAt must fall within a ProductionSchedule ScheduledStart–ScheduledEnd window
+  for the matching Line; batches must not be generated during unscheduled time (04:00–06:00 Night)
 - TimeLog shift coverage must overlap with batch production times. Certain shifts should have more people on than others so we can show variance in calculations for Utilization
 - DowntimeEvents must not overlap for the same equipment

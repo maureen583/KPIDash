@@ -18,6 +18,7 @@ builder.Services.AddScoped<IDowntimeRepository, DowntimeRepository>();
 builder.Services.AddScoped<IBatchRepository, BatchRepository>();
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 builder.Services.AddScoped<ITimeLogRepository, TimeLogRepository>();
+builder.Services.AddScoped<IProductionScheduleRepository, ProductionScheduleRepository>();
 
 var app = builder.Build();
 
@@ -38,6 +39,7 @@ app.MapDowntimeEndpoints();
 app.MapBatchEndpoints();
 app.MapEmployeeEndpoints();
 app.MapTimeLogEndpoints();
+app.MapProductionScheduleEndpoints();
 
 app.MapFallbackToFile("index.html");
 

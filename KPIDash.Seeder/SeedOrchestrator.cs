@@ -58,8 +58,11 @@ public class SeedOrchestrator(DbConnectionFactory factory)
         // 6. TimeLog
         var shiftAssignments = new TimeLogSeeder(factory, rng).Seed(employees, from, to);
 
-        // 7. Batches (before SensorReadings; depends on timelines + shifts)
-        new BatchSeeder(factory, rng).Seed(timelines, shiftAssignments, to);
+        // 7. ProductionSchedule (before Batches — Batches reference compound codes)
+        var scheduleRuns = new ProductionScheduleSeeder(factory, rng).Seed(from, to);
+
+        // 8. Batches (before SensorReadings; depends on timelines + shifts + schedule)
+        new BatchSeeder(factory, rng).Seed(timelines, shiftAssignments, scheduleRuns, to);
 
         // 8. SensorReadings (largest table — shows progress)
         Console.Write("  SensorReadings: generating...");
@@ -82,13 +85,14 @@ public class SeedOrchestrator(DbConnectionFactory factory)
         conn.Execute("DELETE FROM EquipmentStatus");
         conn.Execute("DELETE FROM SensorReadings");
         conn.Execute("DELETE FROM Batches");
+        conn.Execute("DELETE FROM ProductionSchedule");
         conn.Execute("DELETE FROM TimeLog");
         conn.Execute("DELETE FROM Sensors");
         conn.Execute("DELETE FROM Employees");
         conn.Execute("DELETE FROM Equipment");
         // Reset autoincrement counters
         conn.Execute("DELETE FROM sqlite_sequence WHERE name IN " +
-            "('DowntimeEvents','EquipmentStatus','SensorReadings','Batches'," +
+            "('DowntimeEvents','EquipmentStatus','SensorReadings','Batches','ProductionSchedule'," +
             "'TimeLog','Sensors','Employees','Equipment')");
     }
 }

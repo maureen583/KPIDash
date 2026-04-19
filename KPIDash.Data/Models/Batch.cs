@@ -10,4 +10,6 @@ public class Batch
     public double TargetDumpTemp { get; set; }
     public string Status { get; set; } = string.Empty;
     public int OperatorId { get; set; }
+    public string Line { get; set; } = string.Empty;
+    public string CompoundCode { get; set; } = string.Empty;
 }

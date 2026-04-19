@@ -4,7 +4,11 @@
     <h5 class="fw-semibold mb-2 text-secondary text-uppercase timeline-line-label">@LineName</h5>
 
     <div class="timeline-time-axis mb-1">
-        @for (int i = 0; i <= 4; i++)
+        @{
+            var totalHours = (int)Math.Round((WindowEnd - WindowStart).TotalHours);
+            var step = totalHours <= 4 ? 1 : 2;
+        }
+        @for (int i = 0; i <= totalHours; i += step)
         {
             <span>@WindowStart.AddHours(i).ToString("HH:mm")</span>
         }
@@ -14,7 +18,7 @@
     {
         var segments = BuildSegments(
             StatusData.TryGetValue(equipment.EquipmentId, out var records) ? records : new(),
-            WindowStart, WindowEnd);
+            WindowStart, WindowEnd, DataCutoff);
         var currentStatus = segments.Count > 0 ? segments[^1].Status : "Unknown";
         var shortName = equipment.Name.Replace("Line 1 ", "").Replace("Line 2 ", "");
 
@@ -44,6 +48,7 @@
     [Parameter, EditorRequired] public Dictionary<int, List<EquipmentStatus>> StatusData { get; set; } = new();
     [Parameter, EditorRequired] public DateTime WindowStart { get; set; }
     [Parameter, EditorRequired] public DateTime WindowEnd { get; set; }
+    [Parameter, EditorRequired] public DateTime DataCutoff { get; set; }
 
     private static string StatusColor(string status) => status switch
     {
@@ -57,8 +62,8 @@
         (end - start).TotalSeconds / (WindowEnd - WindowStart).TotalSeconds * 100.0;
 
     private List<(DateTime Start, DateTime End, string Status)> BuildSegments(
-        List<EquipmentStatus> records, DateTime windowStart, DateTime windowEnd)
-    {    
+        List<EquipmentStatus> records, DateTime windowStart, DateTime windowEnd, DateTime dataCutoff)
+    {
         var segments = new List<(DateTime Start, DateTime End, string Status)>();
 
         if (records.Count == 0)
@@ -78,17 +83,20 @@
         foreach (var record in inWindow)
         {
             var recordedAt = record.RecordedAt.ToUniversalTime();
-            var segEnd = recordedAt < windowEnd ? recordedAt : windowEnd;
+            var segEnd = recordedAt < dataCutoff ? recordedAt : dataCutoff;
             if (segEnd > cursor)
                 segments.Add((cursor, segEnd, currentStatus));
             cursor = segEnd;
             currentStatus = record.Status;
-            if (cursor >= windowEnd) break;
+            if (cursor >= dataCutoff) break;
         }
 
-        if (cursor < windowEnd)
-            segments.Add((cursor, windowEnd, currentStatus));
+        if (cursor < dataCutoff)
+            segments.Add((cursor, dataCutoff, currentStatus));
+
+        if (dataCutoff < windowEnd)
+            segments.Add((dataCutoff, windowEnd, "Unknown"));
 
         return segments;
-        }
+    }
 }

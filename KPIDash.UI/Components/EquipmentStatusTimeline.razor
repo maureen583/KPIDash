@@ -4,18 +4,14 @@
 <div class="d-flex align-items-center justify-content-between mb-3">
     <h4 class="mb-0">Equipment Status Timeline</h4>
     <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-outline-secondary" @onclick='() => ShiftWindow(-4)'>← 4h</button>
-        <input type="date" class="form-control form-control-sm" style="width: 160px;"
-               value="@windowEnd.ToString("yyyy-MM-dd")"
-               @onchange="OnDateChanged" />
-        <button class="btn btn-sm btn-outline-secondary" @onclick='() => ShiftWindow(4)' disabled="@IsAtNow">4h →</button>
-        <button class="btn btn-sm btn-secondary" @onclick="JumpToNow">Now</button>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="PrevShift">← Shift</button>
+        <span class="text-muted small px-2">
+            @displayedShift.Name · @displayedShift.Start.ToString("MMM d, HH:mm") – @displayedShift.End.ToString("HH:mm") UTC
+        </span>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="NextShift" disabled="@IsCurrentShift">Shift →</button>
+        <button class="btn btn-sm btn-secondary" @onclick="JumpToNow" disabled="@IsCurrentShift">Now</button>
     </div>
 </div>
-
-<p class="text-muted small mb-4">
-    @windowStart.ToString("MMM d, HH:mm") – @windowEnd.ToString("HH:mm") UTC
-</p>
 
 @if (isLoading)
 {
@@ -30,26 +26,43 @@ else
     <EquipmentLineTimeline LineName="Line 1"
                            LineEquipment="line1Equipment"
                            StatusData="statusData"
-                           WindowStart="windowStart"
-                           WindowEnd="windowEnd" />
+                           WindowStart="displayedShift.Start"
+                           WindowEnd="displayedShift.End"
+                           DataCutoff="DataCutoff" />
 
     <EquipmentLineTimeline LineName="Line 2"
                            LineEquipment="line2Equipment"
                            StatusData="statusData"
-                           WindowStart="windowStart"
-                           WindowEnd="windowEnd" />
+                           WindowStart="displayedShift.Start"
+                           WindowEnd="displayedShift.End"
+                           DataCutoff="DataCutoff" />
 
     <div class="d-flex gap-4 mt-2">
         <span><span style="color: #28a745;">●</span> Running</span>
         <span><span style="color: #ffc107;">●</span> Idle</span>
         <span><span style="color: #dc3545;">●</span> Down</span>
+        <span><span style="color: #adb5bd;">●</span> Unknown</span>
     </div>
 }
 
 @code {
-    private DateTime windowEnd = DateTime.UtcNow;
-    private DateTime windowStart => windowEnd.AddHours(-4);
-    private bool IsAtNow => windowEnd >= DateTime.UtcNow.AddMinutes(-1);
+    private static Shift GetShiftAt(DateTime t)
+    {
+        var d = t.Date;
+        return t.Hour switch
+        {
+            >= 6 and < 14  => new("Day",       d.AddHours(6),             d.AddHours(14)),
+            >= 14 and < 22 => new("Afternoon", d.AddHours(14),            d.AddHours(22)),
+            >= 22          => new("Night",     d.AddHours(22),             d.AddDays(1).AddHours(6)),
+            _              => new("Night",     d.AddDays(-1).AddHours(22), d.AddHours(6)),
+        };
+    }
+
+    private static Shift GetCurrentShift() => GetShiftAt(DateTime.UtcNow);
+
+    private Shift displayedShift = GetCurrentShift();
+    private bool IsCurrentShift => displayedShift.Start == GetCurrentShift().Start;
+    private DateTime DataCutoff => IsCurrentShift ? DateTime.UtcNow : displayedShift.End;
 
     private List<Equipment> allEquipment = new();
     private List<Equipment> line1Equipment = new();
@@ -70,13 +83,9 @@ else
         isLoading = true;
         StateHasChanged();
 
-        // Query with an 8-hour buffer before the window so we always capture the baseline status
-        // even when equipment hasn't changed state within the visible 4-hour window.
-        var queryFrom = windowStart.AddHours(-8);
-
         var tasks = allEquipment.Select(async e =>
         {
-            var url = $"/api/equipment/{e.EquipmentId}/status/history?from={queryFrom:o}&to={windowEnd:o}";
+            var url = $"/api/equipment/{e.EquipmentId}/status/history?from={displayedShift.Start:o}&to={displayedShift.End:o}";
             var records = await Http.GetFromJsonAsync<List<EquipmentStatus>>(url) ?? new();
             return (e.EquipmentId, records);
         });
@@ -87,26 +96,24 @@ else
         isLoading = false;
     }
 
-    private async Task ShiftWindow(int hours)
+    private async Task PrevShift()
     {
-        var candidate = windowEnd.AddHours(hours);
-        windowEnd = candidate > DateTime.UtcNow ? DateTime.UtcNow : candidate;
+        displayedShift = GetShiftAt(displayedShift.Start.AddMinutes(-1));
         await LoadStatusData();
+    }
+
+    private async Task NextShift()
+    {
+        if (!IsCurrentShift)
+        {
+            displayedShift = GetShiftAt(displayedShift.End.AddMinutes(1));
+            await LoadStatusData();
+        }
     }
 
     private async Task JumpToNow()
     {
-        windowEnd = DateTime.UtcNow;
+        displayedShift = GetCurrentShift();
         await LoadStatusData();
-    }
-
-    private async Task OnDateChanged(ChangeEventArgs e)
-    {
-        if (DateTime.TryParse(e.Value?.ToString(), out var date))
-        {
-            var endOfDay = date.Date.AddDays(1).AddTicks(-1);
-            windowEnd = endOfDay > DateTime.UtcNow ? DateTime.UtcNow : endOfDay;
-            await LoadStatusData();
-        }
     }
 }

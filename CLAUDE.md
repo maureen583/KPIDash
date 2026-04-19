@@ -23,6 +23,12 @@ SQLite at `/data/kpi.db`. Schema managed via numbered migration scripts in
 - `dotnet restore` — restore NuGet packages
 - `sqlite3 /data/kpi.db` — inspect database
 
+## Testing Rules
+
+- Always kill any running `dotnet run` processes and free the port before finishing a session
+- Use `lsof -ti:5250 | xargs kill -9` to clear port 5250 after testing
+- Never leave background server processes running
+
 ## Architecture Rules
 
 - UI never references Data, Services, or Seeder directly
