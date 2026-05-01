@@ -1,0 +1,65 @@
+@page "/schedule"
+@using KPIDash.UI.Models
+@inject HttpClient Http
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Production Schedule</h4>
+    <ShiftSelector OnShiftChanged="OnShiftChanged" />
+</div>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (!scheduleItems.Any())
+{
+    <MudAlert Severity="Severity.Info">No schedule data for this shift.</MudAlert>
+}
+else
+{
+    @foreach (var line in scheduleItems.GroupBy(s => s.Line).OrderBy(g => g.Key))
+    {
+        <MudText Typo="Typo.h6" Class="mt-3 mb-2">@line.Key</MudText>
+        <MudGrid>
+            @foreach (var run in line.OrderBy(r => r.ScheduledStart))
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Outlined="true">
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle1"><b>@run.CompoundCode</b> — @run.CompoundName</MudText>
+                            <MudText Typo="Typo.body2">@FormatTime(run.ScheduledStart) – @FormatTime(run.ScheduledEnd)</MudText>
+                            <MudText Typo="Typo.body2">Target: @run.TargetBatches batches</MudText>
+                            <MudText Typo="Typo.body2">Operators: @run.PlannedOperators</MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+}
+
+@code {
+    private List<ProductionSchedule> scheduleItems = new();
+    private bool isLoading = true;
+    private Shift currentShift = ShiftSelector.GetCurrentShift();
+
+    protected override async Task OnInitializedAsync() => await LoadSchedule();
+
+    private async Task OnShiftChanged(Shift shift)
+    {
+        currentShift = shift;
+        await LoadSchedule();
+    }
+
+    private async Task LoadSchedule()
+    {
+        isLoading = true;
+        StateHasChanged();
+        var url = $"/api/schedule/{currentShift.Start:yyyy-MM-dd}/{currentShift.Name}";
+        scheduleItems = await Http.GetFromJsonAsync<List<ProductionSchedule>>(url) ?? new();
+        isLoading = false;
+    }
+
+    private static string FormatTime(string iso) =>
+        DateTime.TryParse(iso, out var dt) ? dt.ToString("HH:mm") : iso;
+}

@@ -3,14 +3,7 @@
 
 <div class="d-flex align-items-center justify-content-between mb-3">
     <h4 class="mb-0">Equipment Status Timeline</h4>
-    <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-outline-secondary" @onclick="PrevShift">← Shift</button>
-        <span class="text-muted small px-2">
-            @displayedShift.Name · @displayedShift.Start.ToString("MMM d, HH:mm") – @displayedShift.End.ToString("HH:mm") UTC
-        </span>
-        <button class="btn btn-sm btn-outline-secondary" @onclick="NextShift" disabled="@IsCurrentShift">Shift →</button>
-        <button class="btn btn-sm btn-secondary" @onclick="JumpToNow" disabled="@IsCurrentShift">Now</button>
-    </div>
+    <ShiftSelector OnShiftChanged="OnShiftChanged" />
 </div>
 
 @if (isLoading)
@@ -46,22 +39,8 @@ else
 }
 
 @code {
-    private static Shift GetShiftAt(DateTime t)
-    {
-        var d = t.Date;
-        return t.Hour switch
-        {
-            >= 6 and < 14  => new("Day",       d.AddHours(6),             d.AddHours(14)),
-            >= 14 and < 22 => new("Afternoon", d.AddHours(14),            d.AddHours(22)),
-            >= 22          => new("Night",     d.AddHours(22),             d.AddDays(1).AddHours(6)),
-            _              => new("Night",     d.AddDays(-1).AddHours(22), d.AddHours(6)),
-        };
-    }
-
-    private static Shift GetCurrentShift() => GetShiftAt(DateTime.UtcNow);
-
-    private Shift displayedShift = GetCurrentShift();
-    private bool IsCurrentShift => displayedShift.Start == GetCurrentShift().Start;
+    private Shift displayedShift = ShiftSelector.GetCurrentShift();
+    private bool IsCurrentShift => displayedShift.Start == ShiftSelector.GetCurrentShift().Start;
     private DateTime DataCutoff => IsCurrentShift ? DateTime.UtcNow : displayedShift.End;
 
     private List<Equipment> allEquipment = new();
@@ -96,24 +75,9 @@ else
         isLoading = false;
     }
 
-    private async Task PrevShift()
+    private async Task OnShiftChanged(Shift shift)
     {
-        displayedShift = GetShiftAt(displayedShift.Start.AddMinutes(-1));
-        await LoadStatusData();
-    }
-
-    private async Task NextShift()
-    {
-        if (!IsCurrentShift)
-        {
-            displayedShift = GetShiftAt(displayedShift.End.AddMinutes(1));
-            await LoadStatusData();
-        }
-    }
-
-    private async Task JumpToNow()
-    {
-        displayedShift = GetCurrentShift();
+        displayedShift = shift;
         await LoadStatusData();
     }
 }

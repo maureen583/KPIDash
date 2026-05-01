@@ -1,0 +1,52 @@
+@using KPIDash.UI.Models
+
+<div class="d-flex align-items-center gap-2">
+    <button class="btn btn-sm btn-outline-secondary" @onclick="PrevShift">← Shift</button>
+    <span class="text-muted small px-2">
+        @DisplayedShift.Name · @DisplayedShift.Start.ToString("MMM d, HH:mm") – @DisplayedShift.End.ToString("HH:mm") UTC
+    </span>
+    <button class="btn btn-sm btn-outline-secondary" @onclick="NextShift" disabled="@IsCurrentShift">Shift →</button>
+    <button class="btn btn-sm btn-secondary" @onclick="JumpToNow" disabled="@IsCurrentShift">Now</button>
+</div>
+
+@code {
+    [Parameter] public EventCallback<Shift> OnShiftChanged { get; set; }
+
+    public Shift DisplayedShift { get; private set; } = GetCurrentShift();
+    private bool IsCurrentShift => DisplayedShift.Start == GetCurrentShift().Start;
+
+    public static Shift GetCurrentShift() => GetShiftAt(DateTime.UtcNow);
+
+    public static Shift GetShiftAt(DateTime t)
+    {
+        var d = t.Date;
+        return t.Hour switch
+        {
+            >= 6 and < 14  => new("Day",       d.AddHours(6),             d.AddHours(14)),
+            >= 14 and < 22 => new("Afternoon", d.AddHours(14),            d.AddHours(22)),
+            >= 22          => new("Night",     d.AddHours(22),             d.AddDays(1).AddHours(6)),
+            _              => new("Night",     d.AddDays(-1).AddHours(22), d.AddHours(6)),
+        };
+    }
+
+    private async Task PrevShift()
+    {
+        DisplayedShift = GetShiftAt(DisplayedShift.Start.AddMinutes(-1));
+        await OnShiftChanged.InvokeAsync(DisplayedShift);
+    }
+
+    private async Task NextShift()
+    {
+        if (!IsCurrentShift)
+        {
+            DisplayedShift = GetShiftAt(DisplayedShift.End.AddMinutes(1));
+            await OnShiftChanged.InvokeAsync(DisplayedShift);
+        }
+    }
+
+    private async Task JumpToNow()
+    {
+        DisplayedShift = GetCurrentShift();
+        await OnShiftChanged.InvokeAsync(DisplayedShift);
+    }
+}
