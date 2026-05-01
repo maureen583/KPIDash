@@ -8,11 +8,11 @@ public class EmployeeSeeder(DbConnectionFactory factory)
 {
     private static readonly (string Role, int Count)[] RoleDistribution =
     [
-        ("General Operator", 5),
-        ("Mixers",           3),
-        ("Mill Man",         3),
-        ("Supervisor",       2),
-        ("Maintenance",      2),
+        ("General Operator", 10),
+        ("Mixers",            6),
+        ("Mill Man",          6),
+        ("Supervisor",        4),
+        ("Maintenance",       4),
     ];
 
     public List<(int EmployeeId, string Role)> Seed()

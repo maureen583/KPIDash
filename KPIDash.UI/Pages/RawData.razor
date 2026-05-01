@@ -1,0 +1,170 @@
+@page "/rawdata"
+@using KPIDash.UI.Models
+@inject HttpClient Http
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Raw Sensor Data</h4>
+    <ShiftSelector OnShiftChanged="OnShiftChanged" />
+</div>
+
+<div class="d-flex gap-3 mb-4 flex-wrap align-items-end">
+    <MudSelect T="string" Label="Line"
+               Value="selectedLine" ValueChanged="OnLineChanged"
+               Variant="Variant.Outlined" Margin="Margin.Dense"
+               Style="min-width:110px;">
+        <MudSelectItem Value="@("Line 1")">Line 1</MudSelectItem>
+        <MudSelectItem Value="@("Line 2")">Line 2</MudSelectItem>
+    </MudSelect>
+
+    <MudSelect T="Equipment" Label="Equipment"
+               Value="selectedEquipment" ValueChanged="OnEquipmentChanged"
+               Variant="Variant.Outlined" Margin="Margin.Dense"
+               Style="min-width:180px;"
+               Disabled="@(!lineEquipment.Any())">
+        @foreach (var eq in lineEquipment)
+        {
+            <MudSelectItem Value="@eq">@EquipmentLabel(eq)</MudSelectItem>
+        }
+    </MudSelect>
+
+    <MudSelect T="Sensor" Label="Sensor"
+               Value="selectedSensor" ValueChanged="OnSensorChanged"
+               Variant="Variant.Outlined" Margin="Margin.Dense"
+               Style="min-width:210px;"
+               Disabled="@(!sensors.Any())">
+        @foreach (var s in sensors)
+        {
+            <MudSelectItem Value="@s">@s.Name (@s.Unit)</MudSelectItem>
+        }
+    </MudSelect>
+</div>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (selectedSensor is null)
+{
+    <MudAlert Severity="Severity.Info">Select a sensor to view readings.</MudAlert>
+}
+else if (!readings.Any())
+{
+    <MudAlert Severity="Severity.Info">No readings for this sensor in the selected shift.</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+        @readings.Count readings · @selectedSensor.Name (@selectedSensor.Unit) · normal range @selectedSensor.MinNormal–@selectedSensor.MaxNormal @selectedSensor.Unit
+    </MudText>
+
+    <MudDataGrid Items="@readings" Dense="true" Bordered="true" Hover="true">
+        <Columns>
+            <TemplateColumn Title="Timestamp">
+                <CellTemplate>@context.Item.RecordedAt.ToString("HH:mm:ss")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Value">
+                <CellTemplate>@($"{context.Item.Value:F3} {selectedSensor!.Unit}")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Min Normal">
+                <CellTemplate>@($"{selectedSensor!.MinNormal:G} {selectedSensor!.Unit}")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Max Normal">
+                <CellTemplate>@($"{selectedSensor!.MaxNormal:G} {selectedSensor!.Unit}")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="In Range">
+                <CellTemplate>
+                    @if (context.Item.Value >= selectedSensor!.MinNormal && context.Item.Value <= selectedSensor!.MaxNormal)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">In Range</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Out of Range</MudChip>
+                    }
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    private string selectedLine = "Line 1";
+    private Equipment? selectedEquipment;
+    private Sensor? selectedSensor;
+    private Shift currentShift = ShiftSelector.GetCurrentShift();
+
+    private List<Equipment> allEquipment = new();
+    private List<Equipment> lineEquipment = new();
+    private List<Sensor> sensors = new();
+    private List<SensorReading> readings = new();
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        allEquipment = await Http.GetFromJsonAsync<List<Equipment>>("/api/equipment/") ?? new();
+        RefreshLineEquipment();
+        if (lineEquipment.Any())
+            await OnEquipmentChanged(lineEquipment.First());
+    }
+
+    private void RefreshLineEquipment()
+    {
+        lineEquipment = allEquipment
+            .Where(e => e.Name.StartsWith(selectedLine))
+            .OrderBy(e => e.DisplayOrder)
+            .ToList();
+    }
+
+    private string EquipmentLabel(Equipment eq) =>
+        eq.Name.StartsWith(selectedLine + " ")
+            ? eq.Name[(selectedLine.Length + 1)..]
+            : eq.Name;
+
+    private async Task OnLineChanged(string line)
+    {
+        selectedLine = line;
+        selectedEquipment = null;
+        selectedSensor = null;
+        sensors = new();
+        readings = new();
+        RefreshLineEquipment();
+        if (lineEquipment.Any())
+            await OnEquipmentChanged(lineEquipment.First());
+    }
+
+    private async Task OnEquipmentChanged(Equipment equipment)
+    {
+        selectedEquipment = equipment;
+        selectedSensor = null;
+        sensors = new();
+        readings = new();
+        if (equipment is null) return;
+        sensors = await Http.GetFromJsonAsync<List<Sensor>>($"/api/equipment/{equipment.EquipmentId}/sensors") ?? new();
+        if (sensors.Any())
+            await OnSensorChanged(sensors.First());
+    }
+
+    private async Task OnSensorChanged(Sensor sensor)
+    {
+        selectedSensor = sensor;
+        readings = new();
+        if (sensor is null) return;
+        await LoadReadings();
+    }
+
+    private async Task OnShiftChanged(Shift shift)
+    {
+        currentShift = shift;
+        if (selectedSensor is not null)
+            await LoadReadings();
+    }
+
+    private async Task LoadReadings()
+    {
+        isLoading = true;
+        StateHasChanged();
+        var url = $"/api/sensors/{selectedSensor!.SensorId}/readings?from={currentShift.Start:o}&to={currentShift.End:o}";
+        readings = await Http.GetFromJsonAsync<List<SensorReading>>(url) ?? new();
+        isLoading = false;
+    }
+}

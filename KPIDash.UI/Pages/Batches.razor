@@ -1,0 +1,122 @@
+@page "/batches"
+@using KPIDash.UI.Models
+@inject HttpClient Http
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Batch History</h4>
+    <ShiftSelector OnShiftChanged="OnShiftChanged" />
+</div>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (!batches.Any())
+{
+    <MudAlert Severity="Severity.Info">No batch data for this shift.</MudAlert>
+}
+else
+{
+    @foreach (var line in new[] { "Line 1", "Line 2" })
+    {
+        var lineBatches = batches.Where(b => b.Line == line).OrderBy(b => b.StartedAt).ToList();
+        var lineSchedule = schedule.Where(s => s.Line == line).OrderBy(s => s.ScheduledStart).ToList();
+
+        if (!lineBatches.Any()) continue;
+
+        <MudText Typo="Typo.h6" Class="mt-4 mb-2">@line</MudText>
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Performance vs Target</MudText>
+        <MudDataGrid Items="@GetLineSummary(lineBatches, lineSchedule)" Dense="true" Bordered="true" Class="mb-4">
+            <Columns>
+                <PropertyColumn Property="x => x.CompoundCode" Title="Compound" />
+                <TemplateColumn Title="Window">
+                    <CellTemplate>@context.Item.Window</CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="x => x.Target" Title="Target" />
+                <PropertyColumn Property="x => x.Actual" Title="Actual" />
+                <PropertyColumn Property="x => x.Rejected" Title="Rejected" />
+                <TemplateColumn Title="Avg Cycle">
+                    <CellTemplate>@(context.Item.AvgCycle.HasValue ? $"{context.Item.AvgCycle:0.0} min" : "—")</CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Batches</MudText>
+        <MudDataGrid T="Batch" Items="@lineBatches" Dense="true" Bordered="true" Class="mb-4"
+                     RowStyleFunc="@((b, _) => b.Status == "Rejected" ? "background-color: var(--mud-palette-error-lighten);" : "")">
+            <Columns>
+                <PropertyColumn Property="x => x.BatchNumber" Title="Batch #" />
+                <TemplateColumn Title="Start">
+                    <CellTemplate>@context.Item.StartedAt.ToString("HH:mm")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="End">
+                    <CellTemplate>@(context.Item.CompletedAt?.ToString("HH:mm") ?? "—")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Cycle Time">
+                    <CellTemplate>@(context.Item.CycleMinutes.HasValue ? $"{context.Item.CycleMinutes:0.0} min" : "—")</CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="x => x.CompoundCode" Title="Compound" />
+                <PropertyColumn Property="x => x.Status" Title="Status" />
+                <TemplateColumn Title="Dump Temp">
+                    <CellTemplate>@(context.Item.DumpTemperature.HasValue ? $"{context.Item.DumpTemperature:0.0}°C" : "—")</CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Target Temp">
+                    <CellTemplate>@($"{context.Item.TargetDumpTemp:0.0}°C")</CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    }
+}
+
+@code {
+    private record RunSummary(string CompoundCode, string Window, int Target, int Actual, int Rejected, double? AvgCycle);
+
+    private List<Batch> batches = new();
+    private List<ProductionSchedule> schedule = new();
+    private bool isLoading = true;
+    private Shift currentShift = ShiftSelector.GetCurrentShift();
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task OnShiftChanged(Shift shift)
+    {
+        currentShift = shift;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        StateHasChanged();
+        var batchTask = Http.GetFromJsonAsync<List<Batch>>($"/api/batches/?from={currentShift.Start:o}&to={currentShift.End:o}");
+        var scheduleTask = Http.GetFromJsonAsync<List<ProductionSchedule>>($"/api/schedule/{currentShift.Start:yyyy-MM-dd}/{currentShift.Name}");
+        await Task.WhenAll(batchTask, scheduleTask);
+        batches = batchTask.Result ?? new();
+        schedule = scheduleTask.Result ?? new();
+        isLoading = false;
+    }
+
+    private IEnumerable<RunSummary> GetLineSummary(List<Batch> lineBatches, List<ProductionSchedule> lineSchedule)
+    {
+        foreach (var run in lineSchedule)
+        {
+            if (!DateTime.TryParse(run.ScheduledStart, null, System.Globalization.DateTimeStyles.RoundtripKind, out var start) ||
+                !DateTime.TryParse(run.ScheduledEnd, null, System.Globalization.DateTimeStyles.RoundtripKind, out var end))
+                continue;
+
+            var runBatches = lineBatches.Where(b => b.StartedAt >= start && b.StartedAt < end).ToList();
+            var completed = runBatches.Where(b => b.CycleMinutes.HasValue).ToList();
+            var avgCycle = completed.Any() ? completed.Average(b => b.CycleMinutes!.Value) : (double?)null;
+
+            yield return new RunSummary(
+                run.CompoundCode,
+                $"{start:HH:mm} – {end:HH:mm}",
+                run.TargetBatches,
+                runBatches.Count,
+                runBatches.Count(b => b.Status == "Rejected"),
+                avgCycle
+            );
+        }
+    }
+}

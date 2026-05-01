@@ -13,5 +13,8 @@ public static class TimeLogEndpoints
 
         group.MapGet("/{shiftDate}", async (string shiftDate, ITimeLogRepository repo) =>
             await repo.GetByShiftDateAsync(shiftDate));
+
+        group.MapGet("/{shiftDate}/detail", async (string shiftDate, ITimeLogRepository repo) =>
+            await repo.GetByShiftDateWithEmployeesAsync(shiftDate));
     }
 }

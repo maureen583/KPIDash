@@ -1,7 +1,10 @@
 @using KPIDash.UI.Models
 
-<div class="mb-5">
-    <h5 class="fw-semibold mb-2 text-secondary text-uppercase timeline-line-label">@LineName</h5>
+<div class="mb-0">
+    @if (!string.IsNullOrEmpty(LineName))
+    {
+        <h5 class="fw-semibold mb-2 text-secondary text-uppercase timeline-line-label">@LineName</h5>
+    }
 
     <div class="timeline-time-axis mb-1">
         @{
@@ -72,17 +75,17 @@
             return segments;
         }
 
-        var sorted = records.OrderBy(r => r.RecordedAt.ToUniversalTime()).ToList();
+        var sorted = records.OrderBy(r => r.RecordedAt).ToList();
 
-        var baseline = sorted.LastOrDefault(r => r.RecordedAt.ToUniversalTime() <= windowStart);
-        var inWindow = sorted.Where(r => r.RecordedAt.ToUniversalTime() > windowStart).ToList();
+        var baseline = sorted.LastOrDefault(r => r.RecordedAt <= windowStart);
+        var inWindow = sorted.Where(r => r.RecordedAt > windowStart).ToList();
 
         var cursor = windowStart;
         var currentStatus = baseline?.Status ?? "Unknown";
 
         foreach (var record in inWindow)
         {
-            var recordedAt = record.RecordedAt.ToUniversalTime();
+            var recordedAt = record.RecordedAt;
             var segEnd = recordedAt < dataCutoff ? recordedAt : dataCutoff;
             if (segEnd > cursor)
                 segments.Add((cursor, segEnd, currentStatus));

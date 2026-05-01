@@ -8,4 +8,5 @@ public class TimeLog
     public DateTime? ClockOut { get; set; }
     public string ShiftDate { get; set; } = string.Empty;
     public string Shift { get; set; } = string.Empty;
+    public string Line { get; set; } = string.Empty;
 }

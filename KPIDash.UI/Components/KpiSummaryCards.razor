@@ -1,0 +1,130 @@
+@using KPIDash.UI.Models
+
+@if (Data is null)
+{
+    <div class="d-flex flex-wrap gap-3">
+        @for (int i = 0; i < 6; i++)
+        {
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudSkeleton Width="70%" Height="16px" Class="mb-2" />
+                    <MudSkeleton Width="50%" Height="28px" />
+                </MudCardContent>
+            </MudCard>
+        }
+    </div>
+}
+else
+{
+    <div class="d-flex flex-wrap gap-3">
+
+        @* Card 1 — Availability *@
+        <MudTooltip Placement="Placement.Bottom"
+                    Text="@($"(Planned − Downtime − Idle) / Planned  |  {Data.PlannedProductionMinutes:F0} min planned, {Data.DowntimeMinutes:F0} min downtime, {Data.IdleMinutes:F0} min idle")">
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-uppercase">Availability</MudText>
+                    <MudText Typo="Typo.h5" Style="@($"font-weight:700; color:{ThresholdColor(Data.Availability, 90, 75)}")">
+                        @($"{Data.Availability:P0}")
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudTooltip>
+
+        @* Card 2 — Performance *@
+        <MudTooltip Placement="Placement.Bottom"
+                    Text="@($"Actual Batches / Target Batches  |  {Data.ActualBatches} actual, {Data.TargetBatches} target")">
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-uppercase">Performance</MudText>
+                    <MudText Typo="Typo.h5" Style="@($"font-weight:700; color:{ThresholdColor(Data.Performance, 95, 80)}")">
+                        @($"{Data.Performance:P0}")
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudTooltip>
+
+        @* Card 3 — Quality *@
+        <MudTooltip Placement="Placement.Bottom"
+                    Text="@($"Good Batches / Total Batches  |  {Data.GoodBatches} complete, {Data.TotalBatches} total")">
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-uppercase">Quality</MudText>
+                    <MudText Typo="Typo.h5" Style="@($"font-weight:700; color:{ThresholdColor(Data.Quality, 90, 75)}")">
+                        @($"{Data.Quality:P0}")
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudTooltip>
+
+        @* Card 4 — OEE *@
+        <MudTooltip Placement="Placement.Bottom"
+                    Text="@($"Availability × Performance × Quality  |  {Data.Availability:P0} × {Data.Performance:P0} × {Data.Quality:P0}")">
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-uppercase">OEE</MudText>
+                    <MudText Typo="Typo.h5" Style="@($"font-weight:700; color:{ThresholdColor(Data.Oee, 90, 75)}")">
+                        @($"{Data.Oee:P0}")
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudTooltip>
+
+        @* Card 5 — Batches / Op *@
+        <MudTooltip Placement="Placement.Bottom"
+                    Text="@($"Total Batches / Actual Operators  |  {Data.ActualBatches} batches ÷ {Data.ActualOperators} operators")">
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-uppercase">Batches / Op</MudText>
+                    <MudText Typo="Typo.h5" Style="font-weight:700;">
+                        @($"{Data.BatchesPerOperator:F1}")
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudTooltip>
+
+        @* Card 6 — Labour Efficiency *@
+        @{
+            var targetBpo = Data.PlannedOperators > 0
+                ? (double)Data.TargetBatches / Data.PlannedOperators
+                : 0;
+        }
+        <MudTooltip Placement="Placement.Bottom"
+                    Text="@($"Target BPO / Actual BPO  |  Target BPO = {Data.TargetBatches} ÷ {Data.PlannedOperators} = {targetBpo:F1}, Actual BPO = {Data.BatchesPerOperator:F1}")">
+            <MudCard Style="min-width: 140px; flex: 1 1 140px;">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="text-uppercase">Labour Efficiency</MudText>
+                    <MudText Typo="Typo.h5" Style="@($"font-weight:700; color:{ThresholdColor(Data.LabourEfficiency, 90, 75)}")">
+                        @($"{Data.LabourEfficiency:P0}")
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudTooltip>
+
+    </div>
+
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+        Staffing: @Data.ActualOperators of @Data.PlannedOperators planned operators on shift
+    </MudText>
+}
+
+@code {
+    [Parameter] public KpiSummary? Data { get; set; }
+
+    /// <summary>
+    /// Returns a CSS colour string based on a value (expressed as a 0–1 fraction) against
+    /// two thresholds (also 0–1 fractions). Values at or above <paramref name="green"/> are
+    /// success-green; values between <paramref name="amber"/> (inclusive) and <paramref name="green"/>
+    /// are warning-amber; values below <paramref name="amber"/> are error-red.
+    /// Thresholds are supplied as plain percentages (e.g. 90 means 90 %).
+    /// </summary>
+    private static string ThresholdColor(double value, double green, double amber)
+    {
+        var pct = value * 100.0;
+        return pct >= green
+            ? "var(--mud-palette-success)"
+            : pct >= amber
+                ? "var(--mud-palette-warning)"
+                : "var(--mud-palette-error)";
+    }
+}

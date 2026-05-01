@@ -13,11 +13,7 @@ public class TimelineGenerator(Random rng)
 
     public List<StateWindow> Generate(string equipmentType, DateTime from, DateTime to)
     {
-        var totalDays = (to - from).TotalDays;
-        var downtimeCount = rng.Next(2, 5); // 2-4 downtime events
-
-        // Schedule downtime events at random points, spaced apart
-        var downtimes = ScheduleDowntimes(equipmentType, from, to, downtimeCount);
+        var downtimes = ScheduleDowntimes(equipmentType, from, to);
 
         var windows = new List<StateWindow>();
         var cursor = from;
@@ -37,44 +33,56 @@ public class TimelineGenerator(Random rng)
         return windows;
     }
 
+    // Shift definitions: (startHour, endHour) where endHour > 24 means next day
+    private static readonly (int StartHour, int EndHour)[] ShiftDefs = [(6, 14), (14, 22), (22, 30)];
+
     private List<(DateTime Start, DateTime End, string Reason)> ScheduleDowntimes(
-        string equipmentType, DateTime from, DateTime to, int count)
+        string equipmentType, DateTime from, DateTime to)
     {
-        var totalMinutes = (to - from).TotalMinutes;
         var reasons = DownReasons[equipmentType];
         var result = new List<(DateTime, DateTime, string)>();
 
-        // Divide the period into equal slots and pick a random time within each
-        var slotMinutes = totalMinutes / count;
-        for (int i = 0; i < count; i++)
+        // Guarantee exactly 1 downtime event per shift window
+        for (var day = from.Date; day <= to.Date; day = day.AddDays(1))
         {
-            var slotStart = from.AddMinutes(i * slotMinutes);
-            // Place the downtime randomly within the slot (not at the very start/end)
-            var offset = rng.NextDouble() * (slotMinutes * 0.6) + (slotMinutes * 0.2);
-            var dtStart = slotStart.AddMinutes(offset);
-            var durationMin = rng.Next(15, 121); // 15-120 minutes
-            var dtEnd = dtStart.AddMinutes(durationMin);
+            foreach (var (startHour, endHour) in ShiftDefs)
+            {
+                var shiftStart = day.AddHours(startHour);
+                var shiftEnd   = day.AddHours(endHour); // endHour=30 → next day 06:00
 
-            // Clamp to period
-            if (dtEnd > to) dtEnd = to;
+                if (shiftStart >= to) break;
+                if (shiftEnd > to) shiftEnd = to;
 
-            var reason = reasons[rng.Next(reasons.Length)];
-            result.Add((dtStart, dtEnd, reason));
+                var shiftMinutes = (shiftEnd - shiftStart).TotalMinutes;
+                if (shiftMinutes < 30) continue;
+
+                // Place downtime in the middle 70% of the shift window
+                var padding   = shiftMinutes * 0.15;
+                var available = shiftMinutes - padding * 2;
+                var offset    = rng.NextDouble() * available + padding;
+                var dtStart   = shiftStart.AddMinutes(offset);
+                var duration  = rng.Next(15, 61); // 15-60 min — fits within one shift
+                var dtEnd     = dtStart.AddMinutes(duration);
+                if (dtEnd > shiftEnd) dtEnd = shiftEnd;
+
+                var reason = reasons[rng.Next(reasons.Length)];
+                result.Add((dtStart, dtEnd, reason));
+            }
         }
 
-        // Remove overlaps: if two events overlap, shift the later one
+        // Remove overlaps: shift later event forward if it starts before the previous ends
         result.Sort((a, b) => a.Item1.CompareTo(b.Item1));
         for (int i = 1; i < result.Count; i++)
         {
             if (result[i].Item1 < result[i - 1].Item2)
             {
-                var shifted = result[i - 1].Item2.AddMinutes(30);
+                var shifted = result[i - 1].Item2.AddMinutes(10);
                 var dur = (result[i].Item2 - result[i].Item1).TotalMinutes;
                 result[i] = (shifted, shifted.AddMinutes(dur), result[i].Item3);
             }
         }
 
-        return result.Where(d => d.Item2 <= to).ToList();
+        return result.Where(d => d.Item1 < to && d.Item2 <= to).ToList();
     }
 
     public List<StateWindow> ApplyCascade(List<StateWindow> downstream, List<StateWindow> upstream)
@@ -171,8 +179,8 @@ public class TimelineGenerator(Random rng)
             windows.Add(new StateWindow(cursor, runEnd, "Running", "NormalOperation"));
             cursor = runEnd;
 
-            // Idle: 2-4 minutes between batches
-            var idleMinutes = rng.Next(2, 5);
+            // Idle: 1-2 minutes between batches
+            var idleMinutes = rng.Next(1, 3);
             var idleEnd = cursor.AddMinutes(idleMinutes);
             if (idleEnd >= end)
             {

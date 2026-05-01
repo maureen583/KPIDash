@@ -59,7 +59,7 @@ public class SeedOrchestrator(DbConnectionFactory factory)
         var shiftAssignments = new TimeLogSeeder(factory, rng).Seed(employees, from, to);
 
         // 7. ProductionSchedule (before Batches — Batches reference compound codes)
-        var scheduleRuns = new ProductionScheduleSeeder(factory, rng).Seed(from, to);
+        var scheduleRuns = new ProductionScheduleSeeder(factory, rng).Seed(from, to.AddDays(3));
 
         // 8. Batches (before SensorReadings; depends on timelines + shifts + schedule)
         new BatchSeeder(factory, rng).Seed(timelines, shiftAssignments, scheduleRuns, to);

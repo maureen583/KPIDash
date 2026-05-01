@@ -27,8 +27,21 @@ public class EquipmentStatusRepository(DbConnectionFactory connectionFactory) : 
             WHERE EquipmentId = @EquipmentId
               AND RecordedAt >= @From
               AND RecordedAt <= @To
+
+            UNION ALL
+
+            SELECT * FROM EquipmentStatus
+            WHERE EquipmentId = @EquipmentId
+              AND RecordedAt = (
+                SELECT MAX(RecordedAt) FROM EquipmentStatus
+                WHERE EquipmentId = @EquipmentId
+                  AND RecordedAt < @From
+              )
+
             ORDER BY RecordedAt
             """,
-            new { EquipmentId = equipmentId, From = from.ToString("o"), To = to.ToString("o") });
+            new { EquipmentId = equipmentId,
+                  From = DateTime.SpecifyKind(from, DateTimeKind.Utc).ToString("o"),
+                  To   = DateTime.SpecifyKind(to,   DateTimeKind.Utc).ToString("o") });
     }
 }

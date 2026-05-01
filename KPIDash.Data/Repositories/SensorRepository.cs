@@ -24,7 +24,9 @@ public class SensorRepository(DbConnectionFactory connectionFactory) : ISensorRe
               AND RecordedAt <= @To
             ORDER BY RecordedAt
             """,
-            new { SensorId = sensorId, From = from.ToString("o"), To = to.ToString("o") });
+            new { SensorId = sensorId,
+                  From = DateTime.SpecifyKind(from, DateTimeKind.Utc).ToString("o"),
+                  To   = DateTime.SpecifyKind(to,   DateTimeKind.Utc).ToString("o") });
     }
 
     public async Task<SensorReading?> GetLatestReadingAsync(int sensorId)

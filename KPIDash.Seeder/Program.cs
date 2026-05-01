@@ -15,5 +15,7 @@ Console.WriteLine($"Database: {connectionString}");
 Console.WriteLine();
 
 var factory = new SeederConnectionFactory(connectionString);
+new DatabaseInitializer(factory).Initialize();
+
 var orchestrator = new SeedOrchestrator(factory);
 orchestrator.Seed();

@@ -1,0 +1,94 @@
+@page "/downtime"
+@using KPIDash.UI.Models
+@inject HttpClient Http
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h4 class="mb-0">Downtime</h4>
+    <ShiftSelector OnShiftChanged="OnShiftChanged" />
+</div>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (!events.Any())
+{
+    <MudAlert Severity="Severity.Info">No downtime events for this shift.</MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.h6" Class="mb-2">Summary</MudText>
+    <MudDataGrid Items="@Summary" Dense="true" Bordered="true" Class="mb-4">
+        <Columns>
+            <PropertyColumn Property="x => x.Equipment" Title="Equipment" />
+            <PropertyColumn Property="x => x.TotalMinutes" Title="Total Downtime" Format="0.0" />
+            <PropertyColumn Property="x => x.EventCount" Title="Events" />
+        </Columns>
+    </MudDataGrid>
+
+    <MudText Typo="Typo.h6" Class="mb-2">Events</MudText>
+    <MudDataGrid Items="@events" Dense="true" Bordered="true">
+        <Columns>
+            <PropertyColumn Property="x => x.EquipmentName" Title="Equipment" />
+            <TemplateColumn Title="Start">
+                <CellTemplate>@context.Item.StartedAt.ToString("HH:mm")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="End">
+                <CellTemplate>@(context.Item.EndedAt?.ToString("HH:mm") ?? "—")</CellTemplate>
+            </TemplateColumn>
+            <TemplateColumn Title="Duration">
+                <CellTemplate>@(context.Item.DurationMinutes.HasValue ? $"{context.Item.DurationMinutes:0.0} min" : "—")</CellTemplate>
+            </TemplateColumn>
+            <PropertyColumn Property="x => x.Reason" Title="Reason" />
+            <TemplateColumn Title="Category">
+                <CellTemplate>
+                    <MudSelect T="string" Value="@context.Item.Category"
+                               ValueChanged="@(v => OnCategoryChanged(context.Item, v))"
+                               Dense="true" Margin="Margin.Dense">
+                        @foreach (var cat in Categories)
+                        {
+                            <MudSelectItem Value="@cat">@cat</MudSelectItem>
+                        }
+                    </MudSelect>
+                </CellTemplate>
+            </TemplateColumn>
+        </Columns>
+    </MudDataGrid>
+}
+
+@code {
+    private static readonly string[] Categories = ["Mechanical", "Electrical", "Process", "Safety"];
+
+    private List<DowntimeEvent> events = new();
+    private bool isLoading = true;
+    private Shift currentShift = ShiftSelector.GetCurrentShift();
+
+    private IEnumerable<(string Equipment, double TotalMinutes, int EventCount)> Summary =>
+        events.GroupBy(e => e.EquipmentName)
+              .Select(g => (g.Key, g.Sum(e => e.DurationMinutes ?? 0), g.Count()))
+              .OrderByDescending(x => x.Item2);
+
+    protected override async Task OnInitializedAsync() => await LoadEvents();
+
+    private async Task OnShiftChanged(Shift shift)
+    {
+        currentShift = shift;
+        await LoadEvents();
+    }
+
+    private async Task LoadEvents()
+    {
+        isLoading = true;
+        StateHasChanged();
+        var url = $"/api/downtime/shift?from={currentShift.Start:o}&to={currentShift.End:o}";
+        events = await Http.GetFromJsonAsync<List<DowntimeEvent>>(url) ?? new();
+        isLoading = false;
+    }
+
+    private async Task OnCategoryChanged(DowntimeEvent evt, string newCategory)
+    {
+        evt.Category = newCategory;
+        await Http.PatchAsJsonAsync($"/api/downtime/{evt.DowntimeId}/category",
+            new { Category = newCategory });
+    }
+}

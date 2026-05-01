@@ -30,30 +30,39 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
             if (!timelines.TryGetValue(mixerId, out var timeline)) continue;
 
             var line = mixerName.StartsWith("Line 1") ? "Line 1" : "Line 2";
-            var runningWindows = timeline.Where(w => w.Status == "Running").ToList();
+            var lineSchedule = schedule
+                .Where(r => r.Line == line)
+                .OrderBy(r => r.ScheduledStart)
+                .ToList();
 
-            foreach (var window in runningWindows)
+            foreach (var run in lineSchedule)
             {
-                var cursor = window.Start;
+                var cursor = run.ScheduledStart;
+                var runEnd = run.ScheduledEnd < to ? run.ScheduledEnd : to;
 
-                while (cursor < window.End)
+                while (cursor < runEnd)
                 {
+                    // Skip any active Down period — this is the organic downtime impact on batch count
+                    var down = timeline.FirstOrDefault(w =>
+                        w.Status == "Down" && w.Start <= cursor && w.End > cursor);
+                    if (down != null)
+                    {
+                        cursor = down.End < runEnd ? down.End : runEnd;
+                        continue;
+                    }
+
                     var batchMinutes = rng.Next(8, 13);
                     var batchEnd = cursor.AddMinutes(batchMinutes);
-                    if (batchEnd > window.End) break;
+                    if (batchEnd > runEnd) break;
 
-                    // Skip batches outside the scheduled production window
-                    var compoundCode = GetCompoundCode(cursor, line, schedule);
-                    if (compoundCode == null) { cursor = batchEnd; continue; }
+                    var operatorId = GetActiveOperator(cursor, line, shiftAssignments);
+                    if (operatorId == 0) { cursor = batchEnd; continue; }
 
                     var dateKey = cursor.ToString("yyyyMMdd");
                     dailyCounts.TryAdd(dateKey, 0);
                     dailyCounts[dateKey]++;
 
                     var batchNumber = $"B-{dateKey}-{dailyCounts[dateKey]:D3}";
-                    var operatorId = GetActiveOperator(cursor, shiftAssignments);
-                    if (operatorId == 0) { cursor = batchEnd; continue; }
-
                     var (status, dumpTemp, completedAt) = AssignBatchOutcome(batchEnd, to);
 
                     conn.Execute("""
@@ -74,7 +83,7 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
                             Status       = status,
                             OperatorId   = operatorId,
                             Line         = line,
-                            CompoundCode = compoundCode,
+                            CompoundCode = run.CompoundCode,
                         }, tx);
 
                     total++;
@@ -85,18 +94,6 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
 
         tx.Commit();
         Console.WriteLine($"  Batches: {total} rows");
-    }
-
-    private static string? GetCompoundCode(
-        DateTime time,
-        string line,
-        List<ProductionScheduleSeeder.ScheduleRun> schedule)
-    {
-        return schedule
-            .FirstOrDefault(r => r.Line == line
-                               && r.ScheduledStart <= time
-                               && r.ScheduledEnd > time)
-            ?.CompoundCode;
     }
 
     private (string Status, double? DumpTemp, DateTime? CompletedAt) AssignBatchOutcome(DateTime completedAt, DateTime now)
@@ -118,24 +115,27 @@ public class BatchSeeder(DbConnectionFactory factory, Random rng)
         return ("Complete", temp, completedAt);
     }
 
-    private int GetActiveOperator(DateTime time, List<TimeLogSeeder.ShiftAssignment> assignments)
+    private int GetActiveOperator(DateTime time, string line, List<TimeLogSeeder.ShiftAssignment> assignments)
     {
-        var shiftDate = time.ToString("yyyy-MM-dd");
-        var shiftName = GetShiftName(time);
+        var (shiftDate, shiftName) = GetShiftInfo(time);
 
         var assignment = assignments.FirstOrDefault(
-            a => a.ShiftDate == shiftDate && a.Shift == shiftName);
+            a => a.ShiftDate == shiftDate && a.Shift == shiftName && a.Line == line);
 
         if (assignment == null || assignment.OperatorIds.Count == 0) return 0;
         return assignment.OperatorIds[rng.Next(assignment.OperatorIds.Count)];
     }
 
-    private static string GetShiftName(DateTime time) => time.Hour switch
-    {
-        >= 6 and < 14  => "Day",
-        >= 14 and < 22 => "Afternoon",
-        _              => "Night"
-    };
+    // Night shift starts at 22:00 and is stored under the date it began.
+    // Batches at 00:00–05:59 belong to the previous day's Night shift.
+    private static (string ShiftDate, string ShiftName) GetShiftInfo(DateTime time) =>
+        time.Hour switch
+        {
+            >= 6 and < 14  => (time.ToString("yyyy-MM-dd"), "Day"),
+            >= 14 and < 22 => (time.ToString("yyyy-MM-dd"), "Afternoon"),
+            < 6            => (time.AddDays(-1).ToString("yyyy-MM-dd"), "Night"),
+            _              => (time.ToString("yyyy-MM-dd"), "Night"),
+        };
 
     private double NextGaussian(double mean, double stdDev)
     {

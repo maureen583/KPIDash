@@ -1,0 +1,1 @@
+ALTER TABLE DowntimeEvents ADD COLUMN Category TEXT NOT NULL DEFAULT '';

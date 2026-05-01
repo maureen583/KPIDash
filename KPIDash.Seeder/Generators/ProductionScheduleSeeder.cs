@@ -17,13 +17,14 @@ public class ProductionScheduleSeeder(DbConnectionFactory factory, Random rng)
         ("BR-600",  "Butadiene High Resilience"),
     ];
 
-    // (shift, scheduledHours, plannedOperators)
-    // Night is 6 scheduled hours (22:00–04:00), not 8
-    private static readonly (string Shift, int StartHour, int ScheduledHours, int PlannedOps)[] Shifts =
+    // (shift, startHour, scheduledHours, plannedOpsLine1, plannedOpsLine2)
+    // Night is 6 scheduled hours (22:00–04:00), not 8.
+    // Operator counts are per line: Day 6+4, Afternoon 4+4, Night 4+2.
+    private static readonly (string Shift, int StartHour, int ScheduledHours, int PlannedOpsLine1, int PlannedOpsLine2)[] Shifts =
     [
-        ("Day",       6,  8, 5),
-        ("Afternoon", 14, 8, 4),
-        ("Night",     22, 6, 3),
+        ("Day",       6,  8, 6, 4),
+        ("Afternoon", 14, 8, 4, 4),
+        ("Night",     22, 6, 4, 2),
     ];
 
     public List<ScheduleRun> Seed(DateTime from, DateTime to)
@@ -37,7 +38,7 @@ public class ProductionScheduleSeeder(DbConnectionFactory factory, Random rng)
 
         for (var day = from.Date; day < to.Date; day = day.AddDays(1))
         {
-            foreach (var (shift, startHour, scheduledHours, plannedOps) in Shifts)
+            foreach (var (shift, startHour, scheduledHours, plannedOpsLine1, plannedOpsLine2) in Shifts)
             {
                 var shiftDate = day.ToString("yyyy-MM-dd");
                 var scheduledStart = day.AddHours(startHour);
@@ -49,7 +50,7 @@ public class ProductionScheduleSeeder(DbConnectionFactory factory, Random rng)
 
                 var totalMinutes = (int)(scheduledEnd - scheduledStart).TotalMinutes;
 
-                foreach (var line in new[] { "Line 1", "Line 2" })
+                foreach (var (line, plannedOps) in new[] { ("Line 1", plannedOpsLine1), ("Line 2", plannedOpsLine2) })
                 {
                     var runCount = rng.Next(2, 4); // 2 or 3 compound runs
                     var splits = GenerateSplits(runCount, totalMinutes);

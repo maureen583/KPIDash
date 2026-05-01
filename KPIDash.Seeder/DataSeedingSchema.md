@@ -21,7 +21,7 @@ Equipment (8 rows — Line 1 and Line 2 for each of 4 types)
 └──< SensorReadings (every 5 min, 7 days)
 └──< EquipmentStatus (one row per status change event)
 └──< DowntimeEvents (one row per down period)
-Employees (~15 rows)
+Employees (~30 rows)
 └──< TimeLog (clock in/out, 7 days of shifts)
 ProductionSchedule (2-3 compound runs per shift per line, 7 days)
 └──< Batches (each batch tied to one operator, one line, one compound)
@@ -87,21 +87,30 @@ ProductionSchedule (2-3 compound runs per shift per line, 7 days)
 
 ## Employees Seed Data
 
-Generate 15 fake employees using Bogus with these roles:
+Generate 30 fake employees using Bogus with these roles:
 
-- 5 General Operator
-- 3 Mixers
-- 3 Mill Man
-- 2 Supervisor
-- 2 Maintenance
+- 10 General Operator
+- 6 Mixers
+- 6 Mill Man
+- 4 Supervisor
+- 4 Maintenance
 
 ---
 
 ## TimeLog Rules
 
-- Generate 7 days of shift history
+- Generate 7 days of shift history (inclusive of today up to `DateTime.UtcNow`)
 - Three shifts per day: Day (06:00-14:00), Afternoon (14:00-22:00), Night (22:00-06:00)
-- Assign 3-5 operators per shift
+- Operators are assigned **per line** — each TimeLog row has a `Line` value ('Line 1' or 'Line 2')
+- Planned staffing per line per shift:
+
+| Shift     | Line 1 | Line 2 | Total |
+| --------- | ------ | ------ | ----- |
+| Day       | 6      | 4      | 10    |
+| Afternoon | 4      | 4      | 8     |
+| Night     | 4      | 2      | 6     |
+
+- Actual counts vary at or below planned (never exceed planned — range is 0 to -1 from planned)
 - ClockIn/ClockOut should have small random variance (±15 min) from shift start/end
 - ShiftDate is always the date the shift STARTED
 
@@ -158,21 +167,26 @@ Each shift on each line is divided into 2–3 consecutive compound runs. Every r
 
 Average cycle time is 10 minutes (midpoint of the 8–12 min Banbury cycle).
 
-### PlannedOperators per shift
+### PlannedOperators per line per shift
 
-| Shift     | PlannedOperators |
-| --------- | ---------------- |
-| Day       | 5                |
-| Afternoon | 4                |
-| Night     | 3                |
+`PlannedOperators` is set **per line** on each ProductionSchedule row:
 
-Same value for every row belonging to the same shift.
+| Shift     | Line 1 | Line 2 |
+| --------- | ------ | ------ |
+| Day       | 6      | 4      |
+| Afternoon | 4      | 4      |
+| Night     | 4      | 2      |
+
+All compound-run rows for the same line+shift share the same PlannedOperators value.
 
 ---
 
 ## Batch Rules
 
 - One batch takes 8-12 minutes in the Banbury
+- Batches are placed **consecutively** — Batch N+1 StartedAt = Batch N CompletedAt (no idle gap between batch records)
+- Only active Down periods interrupt the sequence; the seeder skips past downtime and resumes consecutive placement after recovery
+- This means actual batch count ≈ TargetBatches when running cleanly; slightly over if cycles are short (8 min); slightly under proportional to downtime duration
 - BatchNumber format: `B-YYYYMMDD-NNN` (e.g. `B-20260101-001`)
 - TargetDumpTemp is always 120.0C
 - DumpTemperature should be TargetDumpTemp ± 15C with normal distribution
@@ -181,8 +195,8 @@ Same value for every row belonging to the same shift.
 - All others Status = Complete
 - Each batch is assigned to one Operator from the active shift
 - Each batch must have a `Line` value ('Line 1' or 'Line 2') — split roughly 50/50 per shift
-- Each batch must have a `CompoundCode` matching the ProductionSchedule row whose
-  ScheduledStart–ScheduledEnd window contains the batch's StartedAt timestamp
+- Each batch must have a `CompoundCode` taken from the ProductionSchedule run whose ScheduledStart–ScheduledEnd window the batch falls within
+- Night shift batches running between 00:00–05:59 are attributed to the previous calendar day's Night shift (the date the shift started)
 
 ---
 
@@ -210,7 +224,7 @@ Same value for every row belonging to the same shift.
 
 - The triggering sensor drifts beyond MinNormal or MaxNormal
 - Other sensors follow suit over 2-5 readings (realistic degradation)
-- Down periods last 15-120 minutes
+- Down periods last 15-60 minutes
 
 ---
 
@@ -252,19 +266,23 @@ Same value for every row belonging to the same shift.
 - EndedAt = timestamp of first non-Down status after recovery (NULL if still down)
 - DurationMinutes = calculated from StartedAt and EndedAt
 - Reason matches the EquipmentStatus Reason that triggered it
-- Target ~3-5 downtime events per equipment over 7 days
+- Target: 1 downtime event per shift per equipment (~21 over 7 days per equipment)
 
 ---
 
 ## Realistic State Schedule (per day per equipment)
 
 A typical 24-hour period should look roughly like:
+
+```
 06:00 - Running (Day shift starts, equipment warming up)
-06:00 - 14:00 — Running with brief Idle gaps between batches (2-4 min each)
-~10:00 — Optional: 1 Down event (15-45 min), then recovery
+06:00 - 14:00 — Running with brief Idle gaps (1-2 min) between batches, 1 Down event per shift (15-60 min)
 14:00 - 22:00 — Same pattern as Day shift
 22:00 - 06:00 — Same pattern as Night shift
-1-2x per shift — 1 Down event somewhere
+```
+
+Each shift (Day, Afternoon, Night) on each line always has exactly 1 downtime event.
+Inter-batch idle windows are short: 1–2 minutes between each 8–12 min run cycle (~10–15% idle).
 
 ---
 
@@ -272,8 +290,10 @@ A typical 24-hour period should look roughly like:
 
 - SensorReadings and EquipmentStatus must be internally consistent
   (a Down status must have at least one out-of-range sensor reading)
-- Batches only occur when the Banbury is in Running state
+- Batches are placed consecutively through scheduled production time; only Down periods on the Banbury create gaps in the batch sequence
 - Batch StartedAt must fall within a ProductionSchedule ScheduledStart–ScheduledEnd window
   for the matching Line; batches must not be generated during unscheduled time (04:00–06:00 Night)
 - TimeLog shift coverage must overlap with batch production times. Certain shifts should have more people on than others so we can show variance in calculations for Utilization
 - DowntimeEvents must not overlap for the same equipment
+- Actual operators clocked in for a shift never exceed the PlannedOperators count for that shift
+- Labour efficiency is capped at 100% in the KPI formula — values above 1.0 are floored to 1.0

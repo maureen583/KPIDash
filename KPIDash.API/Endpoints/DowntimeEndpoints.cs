@@ -13,5 +13,16 @@ public static class DowntimeEndpoints
 
         group.MapGet("/equipment/{id:int}/downtime", async (int id, IDowntimeRepository repo) =>
             await repo.GetByEquipmentAsync(id));
+
+        group.MapGet("/downtime/shift", async (DateTime from, DateTime to, IDowntimeRepository repo) =>
+            await repo.GetByShiftAsync(from, to));
+
+        group.MapPatch("/downtime/{id:int}/category", async (int id, UpdateCategoryRequest req, IDowntimeRepository repo) =>
+        {
+            await repo.UpdateCategoryAsync(id, req.Category);
+            return Results.NoContent();
+        });
     }
 }
+
+record UpdateCategoryRequest(string Category);

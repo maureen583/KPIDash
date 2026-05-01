@@ -43,7 +43,7 @@
         "type": "Direct",
         "requested": "[10.0.5, )",
         "resolved": "10.0.5",
-        "contentHash": "377VBqkGr00cspqu3dQPtj+mbyIxTBJV40ZAMAIrZXj7M+R6BjRmFMyNvLbGZ+enrsaaQNEKOXxNEhioJmfB5Q=="
+        "contentHash": "iFfcR+mLmkHG2pbmBe7wsCmoL3RqBmkl5eyENVuloUHsn51NBQ3TobP62WVrzG4ItOPfxxy6FQbXSvP2Xc5IIw=="
       },
       "MudBlazor": {
         "type": "Direct",

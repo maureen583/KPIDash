@@ -28,7 +28,8 @@ public class BatchRepository(DbConnectionFactory connectionFactory) : IBatchRepo
             WHERE StartedAt >= @From AND StartedAt <= @To
             ORDER BY StartedAt DESC
             """,
-            new { From = from.ToString("o"), To = to.ToString("o") });
+            new { From = DateTime.SpecifyKind(from, DateTimeKind.Utc).ToString("o"),
+                  To   = DateTime.SpecifyKind(to,   DateTimeKind.Utc).ToString("o") });
     }
 
     public async Task<Batch?> GetLastAsync()

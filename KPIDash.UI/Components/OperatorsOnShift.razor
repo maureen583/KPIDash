@@ -1,0 +1,157 @@
+@using KPIDash.UI.Models
+@inject HttpClient Http
+
+<div class="mb-4" style="max-width:220px;">
+    <MudDatePicker Label="Shift Date"
+                   Date="selectedDate"
+                   DateChanged="OnDateChanged"
+                   Variant="Variant.Outlined"
+                   Margin="Margin.Dense"
+                   DateFormat="MMM d, yyyy"
+                   MaxDate="DateTime.UtcNow.Date"
+                   PickerVariant="PickerVariant.Dialog" />
+</div>
+
+@if (isLoading)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (!entries.Any())
+{
+    <MudAlert Severity="Severity.Info">No operator records for @selectedDateStr.</MudAlert>
+}
+else
+{
+    @foreach (var (shiftName, lineGroups) in ShiftLineGroups)
+    {
+        var (winStart, winEnd) = ShiftWindow(shiftName);
+
+        <div class="mt-4 mb-1">
+            <MudText Typo="Typo.h6" Class="mb-0">@shiftName Shift</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                @winStart.ToString("HH:mm") – @winEnd.ToString("HH:mm") UTC
+            </MudText>
+        </div>
+
+        @foreach (var (lineName, ops) in lineGroups)
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1 text-uppercase" Color="Color.Secondary">
+                @lineName — @ops.Count operator@(ops.Count == 1 ? "" : "s")
+            </MudText>
+
+            <MudDataGrid Items="@ops" Dense="true" Bordered="true" Class="mb-2" Hover="true">
+                <Columns>
+                    <TemplateColumn Title="Name">
+                        <CellTemplate>@context.Item.EmployeeName</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Role">
+                        <CellTemplate>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default">
+                                @context.Item.Role
+                            </MudChip>
+                        </CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Clock In">
+                        <CellTemplate>@context.Item.ClockIn.ToString("HH:mm")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Clock Out">
+                        <CellTemplate>@(context.Item.ClockOut.HasValue ? context.Item.ClockOut.Value.ToString("HH:mm") : "—")</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Hours">
+                        <CellTemplate>@FormatHours(context.Item)</CellTemplate>
+                    </TemplateColumn>
+                    <TemplateColumn Title="Status">
+                        <CellTemplate>
+                            @{ var badges = GetBadges(context.Item, winStart, winEnd); }
+                            @if (!badges.Any())
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">On Time</MudChip>
+                            }
+                            else
+                            {
+                                @foreach (var (label, color) in badges)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="@color" Variant="Variant.Filled" Class="mr-1">@label</MudChip>
+                                }
+                            }
+                        </CellTemplate>
+                    </TemplateColumn>
+                </Columns>
+            </MudDataGrid>
+        }
+    }
+}
+
+@code {
+    private static readonly string[] ShiftOrder = ["Day", "Afternoon", "Night"];
+
+    private DateTime? selectedDate = DateTime.UtcNow.Date;
+    private string selectedDateStr => selectedDate?.ToString("yyyy-MM-dd") ?? DateTime.UtcNow.ToString("yyyy-MM-dd");
+
+    private List<TimeLogEntry> entries = new();
+    private bool isLoading = true;
+
+    private List<(string Shift, List<(string Line, List<TimeLogEntry> Ops)> LineGroups)> ShiftLineGroups =>
+        entries
+            .GroupBy(e => e.Shift)
+            .OrderBy(g => Array.IndexOf(ShiftOrder, g.Key))
+            .Select(sg => (
+                sg.Key,
+                sg.GroupBy(e => e.Line)
+                  .OrderBy(lg => lg.Key)
+                  .Select(lg => (lg.Key, lg.ToList()))
+                  .ToList()
+            ))
+            .ToList();
+
+    protected override async Task OnInitializedAsync() => await LoadEntries();
+
+    private async Task OnDateChanged(DateTime? date)
+    {
+        selectedDate = date;
+        await LoadEntries();
+    }
+
+    private async Task LoadEntries()
+    {
+        isLoading = true;
+        StateHasChanged();
+        entries = await Http.GetFromJsonAsync<List<TimeLogEntry>>($"/api/timelog/{selectedDateStr}/detail") ?? new();
+        isLoading = false;
+    }
+
+    private (DateTime Start, DateTime End) ShiftWindow(string shift)
+    {
+        var date = DateTime.Parse(selectedDateStr,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal);
+        return shift switch
+        {
+            "Day"       => (date.AddHours(6),  date.AddHours(14)),
+            "Afternoon" => (date.AddHours(14), date.AddHours(22)),
+            "Night"     => (date.AddHours(22), date.AddDays(1).AddHours(6)),
+            _           => (date, date.AddHours(8))
+        };
+    }
+
+    private static string FormatHours(TimeLogEntry e)
+    {
+        var end   = e.ClockOut ?? DateTime.UtcNow;
+        var hours = (end - e.ClockIn).TotalHours;
+        return $"{hours:F1}h";
+    }
+
+    private static List<(string Label, Color BadgeColor)> GetBadges(TimeLogEntry e, DateTime winStart, DateTime winEnd)
+    {
+        var badges = new List<(string, Color)>();
+        const int thresholdMinutes = 5;
+
+        if (e.ClockIn > winStart.AddMinutes(thresholdMinutes))
+            badges.Add(("Late In", Color.Warning));
+
+        if (e.ClockOut.HasValue && e.ClockOut.Value < winEnd.AddMinutes(-thresholdMinutes))
+            badges.Add(("Early Out", Color.Warning));
+
+        return badges;
+    }
+}

@@ -19,10 +19,14 @@ builder.Services.AddScoped<IBatchRepository, BatchRepository>();
 builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
 builder.Services.AddScoped<ITimeLogRepository, TimeLogRepository>();
 builder.Services.AddScoped<IProductionScheduleRepository, ProductionScheduleRepository>();
+builder.Services.AddScoped<IKpiRepository, KpiRepository>();
 
 var app = builder.Build();
 
 app.Services.GetRequiredService<DatabaseInitializer>().Initialize();
+
+if (app.Environment.IsDevelopment())
+    app.UseWebAssemblyDebugging();
 
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
@@ -40,6 +44,7 @@ app.MapBatchEndpoints();
 app.MapEmployeeEndpoints();
 app.MapTimeLogEndpoints();
 app.MapProductionScheduleEndpoints();
+app.MapKpiEndpoints();
 
 app.MapFallbackToFile("index.html");
 
